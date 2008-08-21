@@ -1,0 +1,15 @@
+require 'fileutils'
+
+task :default => [:make_pngs]
+
+task :make_pngs do
+  Dir["*.dot"].each do |fn|
+    frame = File.basename(fn, ".dot")
+    `dot -Tpng -o #{frame}.png #{fn}`
+  end
+end
+
+task :clean do
+  FileUtils.rm(Dir["*.dot"])
+  FileUtils.rm(Dir["*.png"])
+end
