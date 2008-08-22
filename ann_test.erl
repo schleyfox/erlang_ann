@@ -3,13 +3,13 @@
 
 setup() ->
   ann_graph:start(),
-  N1_pid = spawn(ann, perceptron, [[],[],[]]),
-  N2_pid = spawn(ann, perceptron, [[],[],[]]),
-  N3_pid = spawn(ann, perceptron, [[],[],[]]),
-  N4_pid = spawn(ann, perceptron, [[],[],[]]),
-  N5_pid = spawn(ann, perceptron, [[],[],[]]),
-  N6_pid = spawn(ann, perceptron, [[],[],[]]),
-  N7_pid = spawn(ann, perceptron, [[],[],[]]),
+  N1_pid = spawn(ann, perceptron, [[],[],[],[]]),
+  N2_pid = spawn(ann, perceptron, [[],[],[],[]]),
+  N3_pid = spawn(ann, perceptron, [[],[],[],[]]),
+  N4_pid = spawn(ann, perceptron, [[],[],[],[]]),
+  N5_pid = spawn(ann, perceptron, [[],[],[],[]]),
+  N6_pid = spawn(ann, perceptron, [[],[],[],[]]),
+  N7_pid = spawn(ann, perceptron, [[],[],[],[]]),
 
   ann:connect(N1_pid, N2_pid),
   ann:connect(N1_pid, N3_pid),
@@ -26,7 +26,7 @@ setup() ->
   ann:connect(N5_pid, N7_pid),
   ann:connect(N6_pid, N7_pid),
 
-  N1_pid ! {pass, 0.5}.
+  N1_pid ! {pass, 0.5, 0.7}.
 
 run() -> 
   ann_graph:start(),
