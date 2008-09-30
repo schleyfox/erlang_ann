@@ -1,0 +1,11 @@
+h1. Erlang ANN
+
+h2. Or: ANNie Get Your Neural Net
+
+Artificial Neural Networks (ANNs) are a class of mathematical models based on ideas taken from biological systems like the brain.  They model classification problems by taking a large number of fairly dumb units (perceptrons) and adjusting the connections between them to identify patterns.  The effect of this is to map input elements into *n*-dimensions and then combine these in such a way that an acceptable output is found.  The key to these systems is that the connections can adapt and converge on a proper mapping through a training and learning phase.
+
+The goal of Erlang ANN is to serve as an educational project on simple neural nets and Erlang OTP.  I am modifying the basic framework created in http://www.trapexit.org/Erlang_and_Neural_Networks to make use of the OpenTelecom Platform.  I hope to also create a system that can be applied to some classification tasks.
+
+h2. Design
+
+This is an educational experiment for myself.  I will update and use this section to describe the architecture of the system.  I have no plans for writing it out as a tutorial, but I will try to pack my commit messages with meaty details about the chronological decisions and this README with the current or intended overall design.
