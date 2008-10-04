@@ -4,13 +4,13 @@
 -behaviour(gen_server).
 
 % API
--export([start_link/0, connect/2, stimulate/2]).
+-export([start_link/0, connect/2, stimulate/2, pass/2]).
 
 % gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--record(state, {inputs=[], outputs=[]}).
+-record(state, {inputs=[], outputs=[], stale_inputs=[]}).
 -record(connection, {node, weight=0.5, value=0}).
 
 % API
@@ -26,6 +26,9 @@ connect(A, B) ->
 stimulate(Node, Value) ->
   gen_server:cast(Node, {stimulate, self(), Value}).
 
+pass(Node, Value) ->
+  gen_server:cast(Node, {pass, Value}).
+
 
 % gen_server callbacks
 
@@ -35,12 +38,22 @@ init([]) ->
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
+handle_cast({pass, Value}, #state{outputs=Outputs} = State) ->
+  stimulate_outputs(Outputs, (sigmoid_fun())(Value)),
+  {noreply, State};
 handle_cast({stimulate, From, Value}, 
-  #state{inputs=Inputs, outputs=Outputs} = State) ->
+  #state{inputs=Inputs, outputs=Outputs, stale_inputs = Stale_Inputs} = 
+    State) ->
 
-  New_Inputs = update_inputs(Inputs, From, Value),
-  stimulate_outputs(Outputs, output_value(New_Inputs)),
-  {noreply, State#state{inputs=New_Inputs}};
+  {New_Inputs, New_Stale_Inputs} = 
+    update_inputs(Inputs, Stale_Inputs, From, Value),
+  Final_Stale_Inputs = case New_Stale_Inputs of
+    [] -> stimulate_outputs(Outputs, output_value(New_Inputs)),
+          perceptron_nodes(New_Inputs);
+    List -> List
+  end,
+  {noreply, State#state{inputs=New_Inputs, 
+      stale_inputs=Final_Stale_Inputs}};
 handle_cast({connect_to_input, PID}, #state{inputs=Inputs} = State) ->
   {noreply,
     State#state{inputs = [#connection{node=PID}|Inputs]}};
@@ -62,16 +75,17 @@ code_change(_OldVsn, State, _Extra) ->
 % Internal Functions
 
 % update the value of the input connection referenced by the node's PID
-% in the list of inputs
-update_inputs(Inputs, Node, New_Value) ->
-  lists:map(
+% in the list of inputs, and update the stale inputs list
+update_inputs(Inputs, Stale_Inputs, Node, New_Value) ->
+  {lists:map(
     fun(#connection{node=N} = C) ->
       case N of
         Node -> C#connection{value=New_Value};
         _ -> C
       end
     end,
-    Inputs).
+    Inputs),
+  lists:delete(Node, Stale_Inputs)}.
 
 % outputs the output value to the terminal
 stimulate_outputs([], Output_Value) ->
