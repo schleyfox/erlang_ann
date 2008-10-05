@@ -4,7 +4,7 @@
 -behaviour(gen_server).
 
 % API
--export([start_link/0, connect/2, stimulate/2, pass/2]).
+-export([start_link/0, connect/2, stimulate/3, pass/2]).
 
 % gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -23,11 +23,11 @@ connect(A, B) ->
   gen_server:cast(A, {connect_to_output, B}),
   gen_server:cast(B, {connect_to_input, A}).
 
-stimulate(Node, Value) ->
-  gen_server:cast(Node, {stimulate, self(), Value}).
+stimulate(Node, Requester, Value) ->
+  gen_server:cast(Node, {stimulate, Requester, self(), Value}).
 
 pass(Node, Value) ->
-  gen_server:cast(Node, {pass, Value}).
+  gen_server:cast(Node, {pass, self(), Value}).
 
 
 % gen_server callbacks
@@ -38,17 +38,17 @@ init([]) ->
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({pass, Value}, #state{outputs=Outputs} = State) ->
-  stimulate_outputs(Outputs, (sigmoid_fun())(Value)),
+handle_cast({pass, Requester, Value}, #state{outputs=Outputs} = State) ->
+  stimulate_outputs(Outputs, Requester, (sigmoid_fun())(Value)),
   {noreply, State};
-handle_cast({stimulate, From, Value}, 
+handle_cast({stimulate, Requester, From, Value}, 
   #state{inputs=Inputs, outputs=Outputs, stale_inputs = Stale_Inputs} = 
     State) ->
 
   {New_Inputs, New_Stale_Inputs} = 
     update_inputs(Inputs, Stale_Inputs, From, Value),
   Final_Stale_Inputs = case New_Stale_Inputs of
-    [] -> stimulate_outputs(Outputs, output_value(New_Inputs)),
+    [] -> stimulate_outputs(Outputs, Requester, output_value(New_Inputs)),
           perceptron_nodes(New_Inputs);
     List -> List
   end,
@@ -88,13 +88,13 @@ update_inputs(Inputs, Stale_Inputs, Node, New_Value) ->
   lists:delete(Node, Stale_Inputs)}.
 
 % outputs the output value to the terminal
-stimulate_outputs([], Output_Value) ->
-  io:format("~w: ~w~n", [self(), Output_Value]);
+stimulate_outputs([], Requester, Output_Value) ->
+  Requester ! {perceptron_output, self(), Output_Value};
 % passes on the output value to the output connections
-stimulate_outputs(Outputs, Output_Value) ->
+stimulate_outputs(Outputs, Requester, Output_Value) ->
   lists:foreach(
     fun(PID) ->
-      stimulate(PID, Output_Value)
+      stimulate(PID, Requester, Output_Value)
     end,
     perceptron_nodes(Outputs)).
 
