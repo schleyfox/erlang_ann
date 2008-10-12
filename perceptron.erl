@@ -4,13 +4,14 @@
 -behaviour(gen_server).
 
 % API
--export([start_link/0, connect/2, stimulate/3, pass/2]).
+-export([start_link/0, connect/2, pass/2]).
 
 % gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--record(state, {inputs=[], outputs=[], stale_inputs=[]}).
+-record(state, {inputs=[], outputs=[], 
+                stale_inputs=[], stale_outputs=[]}).
 -record(connection, {node, weight=0.5, value=0}).
 
 % API
@@ -29,6 +30,9 @@ stimulate(Node, Requester, Value) ->
 pass(Node, Value) ->
   gen_server:cast(Node, {pass, self(), Value}).
 
+backpropagate(Node, Weight, Delta) ->
+  gen_server:cast(Node, {learn, self(), Weight, Delta}).
+
 
 % gen_server callbacks
 
@@ -38,6 +42,21 @@ init([]) ->
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
+handle_cast({learn, From, Weight, Delta}, 
+  #state{outputs = Outputs, stale_outputs = Stale_Outputs, inputs = Inputs}
+  = State) ->
+
+  {New_Outputs, New_Stale_Outputs} = 
+    update_outputs(Outputs, Stale_Outputs, From, Weight, Delta),
+  case New_Stale_Outputs of
+    [] -> backpropagate_inputs(Inputs, delta_value(New_Outputs)),
+          New_Inputs = update_input_weights(Inputs, Delta),
+          {noreply, State#state{inputs = New_Inputs, 
+                      outputs = New_Outputs,
+                      stale_outputs = perceptron_nodes(New_Outputs)}};
+    S -> {noreply, State#state{outputs = New_Outputs,
+                              stale_outputs = S}}
+  end;
 handle_cast({pass, Requester, Value}, #state{outputs=Outputs} = State) ->
   stimulate_outputs(Outputs, Requester, (sigmoid_fun())(Value)),
   {noreply, State};
@@ -87,7 +106,33 @@ update_inputs(Inputs, Stale_Inputs, Node, New_Value) ->
     Inputs),
   lists:delete(Node, Stale_Inputs)}.
 
-% outputs the output value to the terminal
+% updates the weight and delta of the output connection referenced by the
+% PID node.  Updates stale outputs.
+update_outputs(Outputs, Stale_Outputs, Node, Weight, New_Delta) ->
+  {lists:map(
+    fun(#connection{node=N} = C) ->
+      case N of
+        Node -> C#connection{weight=Weight, value=New_Delta};
+        _ -> C
+      end
+    end,
+    Outputs),
+  lists:delete(Node, Stale_Outputs)}.
+
+update_input_weights([], _Delta) -> [];
+update_input_weights(Inputs, Delta) ->
+  Output_Deriv = output_derivative_value(Inputs),
+  Coefficient = learning_rate()*Delta*Output_Deriv,
+  lists:map(
+    fun(#connection{weight = W, value = V} = C) ->
+      C#connection{weight = (W + (Coefficient*V))}
+    end,
+    Inputs).
+
+learning_rate() -> 0.5.
+
+
+% Sends the output value to the Requester
 stimulate_outputs([], Requester, Output_Value) ->
   Requester ! {perceptron_output, self(), Output_Value};
 % passes on the output value to the output connections
@@ -97,6 +142,14 @@ stimulate_outputs(Outputs, Requester, Output_Value) ->
       stimulate(PID, Requester, Output_Value)
     end,
     perceptron_nodes(Outputs)).
+
+% Sends the weight and delta value to connected inputs
+backpropagate_inputs(Inputs, Delta_Value) ->
+  lists:foreach(
+    fun(#connection{node=PID, weight=Weight}) ->
+      backpropagate(PID, Weight, Delta_Value)
+    end,
+    Inputs).
 
 % returns a list of node PIDs from a list of connections
 perceptron_nodes(Connections) ->
@@ -121,14 +174,26 @@ values(Connections) ->
 output_value(Inputs) ->
   output_value(sigmoid_fun(), Inputs).
 
-% caluculates the output value of the perceptron based on the inputs
+% calculates the output value of the perceptron based on the inputs
 % Uses a user specified sigmoid function
 output_value(Func, Inputs) ->
   Func(dot_prod(weights(Inputs), values(Inputs))).
 
+% calculates the output value using the sigmoid derivative function
+output_derivative_value(Inputs) ->
+  output_value(sigmoid_derivative_fun(), Inputs).
+
+% calculates the delta value for the perceptron from the output list
+delta_value(Outputs) ->
+  dot_prod(weights(Outputs), values(Outputs)).
+
 % Specifies the default sigmoid function
 sigmoid_fun() ->
   fun(X) -> 1/(1+math:exp(-X)) end.
+
+% Derivative of default sigmoid
+sigmoid_derivative_fun() ->
+  fun(X) -> math:exp(-X)/(1+math:exp(-2*X)) end.
 
 % takes the dot product of two vectors, X and Y.
 dot_prod(X, Y) -> dot_prod(0, X, Y).
